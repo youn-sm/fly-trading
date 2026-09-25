@@ -139,11 +139,12 @@ def composite(bg: np.ndarray, overlay: Image.Image, flash: float = 0.0) -> np.nd
 
 
 class Reel:
-    def __init__(self, timeline: dict, clips_dir: Path = CLIPS):
+    def __init__(self, timeline: dict, clips_dir: Path = CLIPS, sec_per_day=SEC_PER_DAY, event_sec=EVENT_SEC):
         positions = load_positions(load_ids())
         self.intro = Intro(positions, timeline["brain"])
         self.overlay = Overlay(timeline, positions)
-        self.segments = build_segments([d["action"] for d in timeline["days"]])
+        self.segments = build_segments([d["action"] for d in timeline["days"]],
+                                       sec_per_day=sec_per_day, event_sec=event_sec)
         self.clips = ClipReader(clips_dir)
         self.duration = self.segments[-1].start + self.segments[-1].dur
 
@@ -194,9 +195,11 @@ def main():
     ap.add_argument("--clips", type=Path, default=CLIPS)
     ap.add_argument("--out", type=Path, default=OUTPUT / "reel.mp4")
     ap.add_argument("--preview", action="store_true", help="only save a contact sheet of stills")
+    ap.add_argument("--event-sec", type=float, default=EVENT_SEC, help="seconds each BUY/SELL clip plays")
+    ap.add_argument("--sec-per-day", type=float, default=SEC_PER_DAY, help="chart speed between trades")
     args = ap.parse_args()
 
-    reel = Reel(json.loads(args.timeline.read_text()), args.clips)
+    reel = Reel(json.loads(args.timeline.read_text()), args.clips, args.sec_per_day, args.event_sec)
     if args.preview:
         reel.preview(OUTPUT / "preview" / "reel_sheet.png")
     else:
