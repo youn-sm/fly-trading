@@ -21,9 +21,14 @@ def _require(path: Path) -> Path:
     return path
 
 
+def load_ids() -> np.ndarray:
+    """FlyWire v630 ids in model index order."""
+    return pd.read_csv(_require(COMPLETENESS), index_col=0).index.to_numpy(np.int64)
+
+
 def load_connectome() -> tuple[np.ndarray, sparse.csr_matrix]:
     """Return (flywire ids, signed synapse-count matrix W[pre, post])."""
-    ids = pd.read_csv(_require(COMPLETENESS), index_col=0).index.to_numpy(np.int64)
+    ids = load_ids()
     df = pd.read_parquet(
         _require(CONNECTIVITY),
         columns=["Presynaptic_Index", "Postsynaptic_Index", "Excitatory x Connectivity"],
