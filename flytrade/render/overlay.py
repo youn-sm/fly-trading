@@ -10,6 +10,7 @@ from flytrade.render.common import (BITTER, BRAIN, DOWN, MN9, PANEL, SUGAR, UP, 
 
 CHART = (50, 1180, 1030, 1480)  # x0, y0, x1, y1
 HUD = (560, 290, 1030, 630)
+POP_X = 300  # BUY!/SELL! sit in the empty column left of the HUD, clear of the fly below
 MINI = (440, 170)  # mini brain size inside the HUD
 EVENT_TEXT = {"BUY": ("BUY!", "냠냠 · 매수", UP), "SELL": ("SELL!", "퉤! · 매도", DOWN)}
 
@@ -141,12 +142,12 @@ class Overlay:
             return
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         d = ImageDraw.Draw(layer)
-        d.text((W / 2, 800), big, font=font(max(1, int(200 * scale)), display=True), fill=color,
-               anchor="mm", stroke_width=10, stroke_fill=(0, 0, 0))
-        d.text((W / 2, 960), small, font=font(max(1, int(76 * scale))), fill=WHITE,
-               anchor="mm", stroke_width=6, stroke_fill=(0, 0, 0))
-        d.text((W / 2, 1060), f"MN9 {day['mn9_hz']:.0f}Hz", font=font(max(1, int(48 * scale))), fill=MN9,
+        d.text((POP_X, 410), big, font=font(max(1, int(150 * scale)), display=True), fill=color,
+               anchor="mm", stroke_width=9, stroke_fill=(0, 0, 0))
+        d.text((POP_X, 540), small, font=font(max(1, int(58 * scale))), fill=WHITE,
                anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0))
+        d.text((POP_X, 605), f"MN9 {day['mn9_hz']:.0f}Hz", font=font(max(1, int(40 * scale))), fill=MN9,
+               anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0))
         if fade < 1:
             layer.putalpha(Image.eval(layer.getchannel("A"), lambda a: int(a * fade)))
         img.alpha_composite(layer)
