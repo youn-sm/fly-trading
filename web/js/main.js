@@ -107,8 +107,23 @@ function cameraPush(s) {
   controls.target.sub(pushOffset);
   pushOffset.copy(PUSH_TARGET).multiplyScalar(k);
   controls.target.add(pushOffset);
-  camera.zoom = baseZoom * (1 + 0.45 * k);
+  camera.zoom = baseZoom * (1 + 0.6 * k);
   camera.updateProjectionMatrix();
+}
+
+// the room goes dark and a cold spotlight falls on the fly while it despairs
+const { hemi, key, glow, spot } = room.lights;
+const base = { hemi: hemi.intensity, key: key.intensity, glow: glow.intensity, glowColor: glow.color.clone() };
+const RED = new THREE.Color(0xff3040);
+let drama = 0;
+function lightDrama(dt, mode) {
+  drama += ((mode === 'despair' ? 1 : 0) - drama) * (1 - Math.exp(-dt * 2.5));
+  hemi.intensity = base.hemi * (1 - 0.7 * drama);
+  key.intensity = base.key * (1 - 0.8 * drama);
+  glow.intensity = base.glow * (1 - 0.3 * drama);
+  glow.color.copy(base.glowColor).lerp(RED, drama);
+  spot.intensity = 60 * drama;
+  $('vignette').style.opacity = drama.toFixed(3);
 }
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
@@ -122,6 +137,7 @@ renderer.setAnimationLoop(() => {
   if (s.kind === 'ending' && lost) mode = endingMode(s.p * LOSS_ENDING_SEC);
   $('account').classList.toggle('final', s.kind === 'ending' && s.p * (lost ? LOSS_ENDING_SEC : ENDING_SEC) > 0.4);
   fly.setMode(mode);
+  lightDrama(paused ? 0 : dt, mode);
 
   room.drop.visible = acting;
   if (acting) {

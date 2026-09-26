@@ -2,7 +2,7 @@
 export const SEC_PER_DAY = 0.2;
 export const EVENT_SEC = 1.4; // motion ~1.1 s, then settles back to idle before the chart moves on
 export const ENDING_SEC = 3;
-export const LOSS_ENDING_SEC = 10; // room for the fly to read the result and fall apart
+export const LOSS_ENDING_SEC = 16; // room for the fly to read the result and fall apart
 
 export function buildSegments(days, endingSec = ENDING_SEC) {
   const segs = [];

@@ -85,6 +85,14 @@ class Leg {
     this.tarsus.position.x = b;
     this.tibia.add(this.tarsus);
     this.tarsus.add(rod(c, 0.032, 0.018, tipMaterial, 8));
+    // a wider "palm" at the tip, only grown while the fly buries its face in its hands
+    this.pad = new THREE.Group();
+    this.pad.position.x = c * 0.72;
+    this.pad.scale.setScalar(0);
+    this.tarsus.add(this.pad);
+    const palm = mesh(new THREE.SphereGeometry(0.07, 14, 10), tipMaterial);
+    palm.scale.set(2.4, 1.3, 1.6);
+    this.pad.add(palm);
   }
 
   // place the tarsus tip on `target` with the tarsus at absolute pitch `phi` (both in the parent frame)
@@ -137,7 +145,7 @@ const MODES = {
   shock: { ...POSE, shock: 1 },
   despair: { ...POSE, despair: 1 },
 };
-const TEARS = 8;
+const TEARS = 10;
 const TEAR_CYCLE = 0.9; // s for one tear to roll off and fall
 
 export class Fly {
@@ -303,16 +311,19 @@ export class Fly {
     for (const key in this.state) this.state[key] += (this.target[key] - this.state[key]) * k;
     const { typing, feed, groom, buzz, droop, lean, shock, despair } = this.state;
     const sob = despair * Math.max(0, Math.sin(t * 9)) * (0.6 + 0.4 * Math.sin(t * 1.3)); // shaky breaths
+    const wail = despair * Math.max(0, Math.sin(t * 2.2)) ** 3; // every ~3 s the head flings further back in a wail
 
     this.pivot.rotation.y = 0.35 * groom - 0.95 * despair; // can't bear to look: turn from the screen toward the camera
-    this.body.rotation.z = SIT_PITCH - 0.3 * feed - 0.4 * droop - 0.28 * lean + 0.3 * shock - 0.42 * despair
-      + 0.015 * Math.sin(t * 1.6) + 0.035 * sob;
-    this.body.position.y = 0.04 * shock * Math.abs(Math.sin(t * 40)) - 0.08 * despair + 0.02 * sob;
-    this.abdomen.scale.setScalar(1 + 0.012 * Math.sin(t * 2.2) + 0.03 * sob);
+    this.pivot.rotation.x = despair * (0.07 * Math.sin(t * 1.4) + 0.02 * sob); // rocking side to side
+    this.body.rotation.z = SIT_PITCH - 0.3 * feed - 0.4 * droop - 0.28 * lean + 0.3 * shock + 0.3 * despair
+      + 0.12 * wail + 0.015 * Math.sin(t * 1.6) + 0.035 * sob;
+    this.body.position.y = 0.04 * shock * Math.abs(Math.sin(t * 40)) + 0.03 * wail + 0.02 * sob;
+    this.abdomen.scale.setScalar(1 + 0.012 * Math.sin(t * 2.2) + 0.03 * sob + 0.04 * wail);
 
+    // despair: head thrown back to the sky, face buried in both hands
     this.head.rotation.z = -SIT_PITCH - 0.15 - 0.2 * feed + 0.45 * groom - 0.3 * droop - 0.12 * lean + 0.35 * shock
-      - 0.45 * despair + 0.03 * Math.sin(t * 0.9);
-    this.head.rotation.y = 0.08 * Math.sin(t * 0.7) * typing + 0.3 * Math.sin(t * 2.4) * despair; // "no, no, no"
+      + 0.55 * despair + 0.3 * wail + 0.03 * Math.sin(t * 0.9);
+    this.head.rotation.y = 0.08 * Math.sin(t * 0.7) * typing + 0.22 * Math.sin(t * 1.7) * despair; // "no, no, no"
 
     // proboscis: tucked (e=0) → reaching down-forward (e=1), pumping while feeding
     const e = THREE.MathUtils.clamp(feed + 0.06 * Math.sin(t * 16) * feed, 0, 1.1);
@@ -328,7 +339,7 @@ export class Fly {
     this.antennae.forEach((a, i) => {
       const calm = 1 - shock - despair;
       a.rotation.z = (0.15 * Math.sin(t * 3.1 + i * 1.7) + 0.1 * Math.sin(t * 7.3 + i)) * Math.max(calm, 0.2)
-        + 0.5 * shock - 0.55 * despair; // spring up in shock, go limp in despair
+        + 0.5 * shock - 0.55 * despair + 0.5 * wail; // spring up in shock, go limp in despair
     });
 
     for (const { hinge, s } of this.wings) {
@@ -341,13 +352,14 @@ export class Fly {
     this.body.updateMatrix();
     this.head.updateMatrix();
     const toPivot = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(this.head.matrix).applyMatrix4(this.body.matrix);
+    const dirToPivot = (x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(this.head.quaternion).applyQuaternion(this.body.quaternion).normalize();
     const mouth = toPivot(0.3, -0.25, 0);
 
     for (const { m, s, phase } of this.tears) {
       const age = (t + phase) % TEAR_CYCLE / TEAR_CYCLE;
       m.visible = despair > 0.5;
       if (!m.visible) continue;
-      const eye = toPivot(0.3, -0.12, s * 0.36);
+      const eye = toPivot(0.3, -0.16, s * 0.4); // leaking out from under the hands
       const fall = Math.max(0, age - 0.25) / 0.75;
       m.position.copy(eye).add(new THREE.Vector3(0.12 * fall, -1.6 * fall * fall, s * 0.08 * fall));
       m.scale.setScalar(THREE.MathUtils.smoothstep(age, 0, 0.25) * (1 - 0.5 * fall));
@@ -364,7 +376,7 @@ export class Fly {
         const hang = new THREE.Vector3(0.55, -0.95, s * 0.45);
         const grip = rest.clone().add(new THREE.Vector3(0.2, 0.02, -s * 0.12)); // lean in, hands on the desk
         const up = toPivot(-0.05, 0.75, s * 0.55); // hands thrown up beside the head
-        const clutch = toPivot(0.0 + 0.03 * Math.sin(t * 9 + phase), 0.36, s * (0.2 + 0.02 * sob)); // hands clasped over the top of the head
+        const clutch = toPivot(0.46 + 0.02 * Math.sin(t * 9 + phase), 0.1 + 0.03 * sob, s * 0.2); // palms pressed over the eyes
         const w = [typing, feed, groom, droop, lean, shock, despair];
         target = [type, rest, rub, hang, grip, up, clutch]
           .reduce((acc, v, i) => acc.add(v.clone().multiplyScalar(w[i])), new THREE.Vector3())
@@ -374,9 +386,10 @@ export class Fly {
         // blend from the usual upright-knee pose into elbows-out, palms-up-the-sides-of-the-head
         const horiz = new THREE.Vector3(target.x - origin.x, 0, target.z - origin.z).normalize();
         const tdir = horiz.multiplyScalar(Math.cos(phi)).add(new THREE.Vector3(0, Math.sin(phi), 0))
-          .lerp(new THREE.Vector3(0.1, 0.45, -s).normalize(), despair).normalize();
-        const pole = new THREE.Vector3(0, 1, 0).lerp(new THREE.Vector3(0.1, 0.1, s).normalize(), despair).normalize();
+          .lerp(dirToPivot(0.1, 1, -s * 0.6), despair).normalize(); // fingers up and across the eyes
+        const pole = new THREE.Vector3(0, 1, 0).lerp(new THREE.Vector3(0.2, -0.5, s).normalize(), despair).normalize(); // elbows out and down
         leg.reachPole(origin, target, tdir, pole);
+        leg.pad.scale.setScalar(despair);
         continue;
       } else {
         // dangle over the front edge of the seat

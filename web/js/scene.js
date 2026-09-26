@@ -97,7 +97,8 @@ export function buildRoom(scene, screenCanvas) {
   scene.add(drop);
 
   // lights
-  scene.add(new THREE.HemisphereLight(0xb8c6ff, 0x1a1420, 0.9));
+  const hemi = new THREE.HemisphereLight(0xb8c6ff, 0x1a1420, 0.9);
+  scene.add(hemi);
   const key = new THREE.DirectionalLight(0xffffff, 2.4);
   key.position.set(-3, 8, 5);
   key.castShadow = true;
@@ -111,9 +112,15 @@ export function buildRoom(scene, screenCanvas) {
   const rim = new THREE.DirectionalLight(0x9a6bff, 1.4);
   rim.position.set(-5, 3, -4);
   scene.add(rim);
+  // cold spotlight straight down on the fly, only lit for the despair ending
+  const spot = new THREE.SpotLight(0xa8c8ff, 0, 9, 0.32, 0.6, 1);
+  spot.position.set(FLY_POS.x - 0.3, FLY_POS.y + 6, FLY_POS.z + 0.6);
+  spot.target.position.copy(FLY_POS);
+  scene.add(spot, spot.target);
 
   return {
     texture, drop, dropMat, dropLight,
+    lights: { hemi, key, glow, rim, spot },
     // positions the fly needs, relative to the fly
     keyboard: KEYBOARD.clone().sub(FLY_POS),
     seatY: SEAT_TOP - FLY_POS.y,
