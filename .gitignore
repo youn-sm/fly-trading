@@ -6,3 +6,4 @@ data/
 output/
 assets/clips/*.mp4
 .DS_Store
+.claude/
