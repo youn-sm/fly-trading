@@ -146,6 +146,21 @@ const MODES = {
   despair: { ...POSE, despair: 1 },
 };
 const TEARS = 10;
+const SMOKE = 90;
+const DRAG_EVERY = 5.5; // s between drags on the cigarette
+
+function smokeSprite() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(240,240,245,1)');
+  grad.addColorStop(0.45, 'rgba(220,222,230,0.6)');
+  grad.addColorStop(1, 'rgba(200,200,210,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 const TEAR_CYCLE = 0.9; // s for one tear to roll off and fall
 
 export class Fly {
@@ -282,6 +297,40 @@ export class Fly {
       return { m, s: i % 2 ? 1 : -1, phase: (Math.floor(i / 2) / (TEARS / 2)) * TEAR_CYCLE };
     });
 
+    // cigarette hanging from the corner of the mouth (camera side), ember glows on each drag
+    this.cig = new THREE.Group();
+    this.cig.position.set(0.33, -0.2, 0.1);
+    this.cig.rotation.set(0, -0.55, -0.45);
+    this.cig.scale.setScalar(1.7);
+    this.head.add(this.cig);
+    const filter = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.09, 12), std(0xd98c3a, { roughness: 0.8 }));
+    filter.rotation.z = Math.PI / 2;
+    filter.position.x = 0.045;
+    const paper = mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.24, 12), std(0xf4f1ea, { roughness: 0.9 }));
+    paper.rotation.z = Math.PI / 2;
+    paper.position.x = 0.21;
+    this.emberMat = new THREE.MeshStandardMaterial({ color: 0x3a2a22, emissive: 0xff5a10, emissiveIntensity: 1.5, roughness: 1 });
+    const ember = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.024, 0.03, 12), this.emberMat);
+    ember.rotation.z = Math.PI / 2;
+    ember.position.x = 0.345;
+    this.cigTip = new THREE.Object3D();
+    this.cigTip.position.x = 0.36;
+    this.cig.add(filter, paper, ember, this.cigTip);
+    this.emberLight = new THREE.PointLight(0xff6a20, 0, 0.8);
+    this.emberLight.position.x = 0.4;
+    this.cig.add(this.emberLight);
+
+    // smoke lives in the fly's group so it drifts straight up instead of following the head
+    const smokeTex = smokeSprite();
+    this.smoke = Array.from({ length: SMOKE }, () => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0xb8bcc6, transparent: true, depthWrite: false, opacity: 0 }));
+      sp.visible = false;
+      this.group.add(sp);
+      return { sp, age: 1, life: 1, vel: new THREE.Vector3(), size: 0.1 };
+    });
+    this.smokeNext = 0;
+    this.smokeAcc = 0;
+
     // legs hang off the pivot so their targets can live in a stable frame
     const LEN = { front: [0.6, 0.55, 0.38], mid: [0.62, 0.6, 0.4], hind: [0.66, 0.62, 0.42] };
     const ATTACH = { front: [0.28, -0.35, 0.18], mid: [0.02, -0.42, 0.24], hind: [-0.25, -0.38, 0.22] };
@@ -298,6 +347,47 @@ export class Fly {
     this.keyboard = new THREE.Vector3(1.2, -0.35, 0);
     this.seatY = -0.95;
     this.update(0);
+  }
+
+  // a drag every few seconds: ember flares, then a puff is exhaled from the mouth; a thin wisp rises from the tip
+  updateSmoke(dt, t, despair) {
+    const cycle = t % DRAG_EVERY;
+    const drag = Math.max(0, Math.sin(Math.PI * THREE.MathUtils.clamp((cycle - 0.2) / 0.9, 0, 1)));
+    const exhale = cycle > 1.6 && cycle < 2.6;
+    this.emberMat.emissiveIntensity = 1.2 + 3 * drag + 0.3 * Math.sin(t * 7);
+    this.emberLight.intensity = 0.4 + 1.6 * drag;
+    this.cig.rotation.z = -0.45 + 0.12 * drag - 0.35 * despair; // lifts on a drag, droops when all is lost
+    if (dt <= 0) return;
+    this.group.updateWorldMatrix(true, true);
+    const local = (obj) => this.group.worldToLocal(obj.getWorldPosition(new THREE.Vector3()));
+    const tip = local(this.cigTip);
+    const mouth = this.group.worldToLocal(this.head.localToWorld(new THREE.Vector3(0.38, -0.2, 0.1)));
+    const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(this.pivot.quaternion);
+    const emit = (pos, vel, size, life) => {
+      const p = this.smoke[this.smokeNext];
+      this.smokeNext = (this.smokeNext + 1) % SMOKE;
+      p.sp.position.copy(pos);
+      p.vel.copy(vel);
+      Object.assign(p, { age: 0, life, size });
+      p.sp.visible = true;
+    };
+    this.smokeAcc += dt * (exhale ? 20 : 10);
+    while (this.smokeAcc >= 1) {
+      this.smokeAcc -= 1;
+      const j = () => (Math.random() - 0.5) * 0.08;
+      if (exhale) emit(mouth, forward.clone().multiplyScalar(0.55).add(new THREE.Vector3(j(), 0.12 + j(), j())), 0.16, 2.2);
+      else emit(tip, new THREE.Vector3(j(), 0.3, j()), 0.12, 2.8);
+    }
+    for (const p of this.smoke) {
+      if (!p.sp.visible) continue;
+      p.age += dt;
+      const a = p.age / p.life;
+      if (a >= 1) { p.sp.visible = false; continue; }
+      p.vel.multiplyScalar(1 - dt * 0.6).add(new THREE.Vector3(0.05 * Math.sin(t * 2 + p.size * 90), 0.18, 0).multiplyScalar(dt));
+      p.sp.position.addScaledVector(p.vel, dt);
+      p.sp.scale.setScalar(p.size * (1 + 3.5 * a));
+      p.sp.material.opacity = 0.55 * Math.min(1, a * 5) * (1 - a) ** 1.5;
+    }
   }
 
   setMode(mode) {
@@ -365,6 +455,8 @@ export class Fly {
       m.scale.setScalar(THREE.MathUtils.smoothstep(age, 0, 0.25) * (1 - 0.5 * fall));
       m.scale.y *= 1.35;
     }
+    this.updateSmoke(dt, t, despair);
+
     for (const { leg, pair, s, attach } of this.legs) {
       const origin = attach.clone().applyMatrix4(this.body.matrix);
       let target, phi;

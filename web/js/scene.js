@@ -1,5 +1,6 @@
 // The office: grid floor, low-poly desk, stool, keyboard, monitor, and the taste droplet.
 import * as THREE from 'three';
+import { buildClutter } from './props.js';
 
 export const FLY_POS = new THREE.Vector3(0, 2.0, 0);
 const DESK_TOP = 1.65;
@@ -86,6 +87,8 @@ export function buildRoom(scene, screenCanvas) {
   screen.position.set(-0.04, 1.12, 0);
   monitor.add(screen);
   scene.add(monitor);
+
+  buildClutter(scene, DESK_TOP);
 
   // the taste droplet on the desk in front of the keyboard
   const dropMat = new THREE.MeshStandardMaterial({ color: 0x40ff90, emissive: 0x20c060, emissiveIntensity: 1.6, roughness: 0.05, transparent: true, opacity: 0.9 });
