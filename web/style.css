@@ -1,7 +1,7 @@
 :root {
   --bg: #06070d;
-  --panel: #0d0f1c;
-  --line: #242848;
+  --card: rgba(12, 14, 28, 0.78);
+  --line: rgba(120, 130, 200, 0.22);
   --text: #e7e9f5;
   --muted: #8a8fb0;
   --sugar: #ffc440;
@@ -9,14 +9,40 @@
   --mn9: #ff46a0;
   --up: #28dc78;
   --down: #ff4650;
-  --brain: #4696ff;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
   font-family: "Apple SD Gothic Neo", "Pretendard", system-ui, sans-serif; }
-body { display: flex; }
-#stage { flex: 1; position: relative; min-width: 0; }
+#stage { position: fixed; inset: 0; }
 #stage canvas { display: block; width: 100%; height: 100%; }
-#panel { width: clamp(300px, 27vw, 460px); background: var(--panel); border-left: 1px solid var(--line);
-  padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+
+.card { position: fixed; background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 14px 18px; backdrop-filter: blur(8px); font-size: clamp(12px, 1.05vw, 17px); }
+.label { color: var(--muted); font-size: 0.85em; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+#account { top: 2.2vh; left: 1.6vw; width: clamp(220px, 19vw, 320px); }
+#account .big { font-size: 3.1em; font-weight: 800; line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums; }
+#account .sub { color: var(--muted); margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+#account .row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px;
+  font-variant-numeric: tabular-nums; font-weight: 700; }
+#log { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line);
+  font-size: 0.85em; font-variant-numeric: tabular-nums; min-height: 4.6em; }
+#log li { display: flex; justify-content: space-between; color: var(--muted); }
+#log li b.buy { color: var(--up); }
+#log li b.sell { color: var(--down); }
+
+#brain { bottom: 2.2vh; right: 1.6vw; width: clamp(240px, 22vw, 380px); }
+#brain .title { font-weight: 800; font-size: 1.15em; }
+#brain canvas { display: block; width: 100%; aspect-ratio: 16 / 10; margin: 4px 0 6px; }
+.meter { display: grid; grid-template-columns: 3.2em 1fr 4.2em; align-items: center; gap: 8px; margin-top: 4px;
+  font-weight: 700; font-variant-numeric: tabular-nums; }
+.meter i { height: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.meter b { display: block; height: 100%; width: 0; border-radius: 5px; transition: width 0.12s linear; }
+.meter em { font-style: normal; text-align: right; }
+.meter.sugar span, .meter.sugar em { color: var(--sugar); } .meter.sugar b { background: var(--sugar); }
+.meter.bitter span, .meter.bitter em { color: var(--bitter); } .meter.bitter b { background: var(--bitter); }
+.meter.mn9 span, .meter.mn9 em { color: var(--mn9); } .meter.mn9 b { background: var(--mn9); }
+#decision { margin-top: 8px; font-weight: 700; min-height: 1.3em; }

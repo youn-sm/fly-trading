@@ -258,7 +258,7 @@ export class Fly {
   update(dt) {
     this.t += dt;
     const t = this.t;
-    const k = 1 - Math.exp(-dt * 7);
+    const k = 1 - Math.exp(-dt * 10);
     for (const key in this.state) this.state[key] += (this.target[key] - this.state[key]) * k;
     const { typing, feed, groom, buzz, droop } = this.state;
 
@@ -288,6 +288,7 @@ export class Fly {
       const flap = buzz * Math.sin(t * 90);
       hinge.rotation.y = Math.PI + s * (0.2 + 0.1 * droop + 0.35 * buzz + 0.25 * flap);
       hinge.rotation.z = 0.78 + 0.3 * buzz * Math.abs(flap) - 0.1 * droop; // lie along the abdomen
+      hinge.rotation.x = s * 0.45; // roof-like tilt so a wing is never seen edge-on
     }
 
     this.body.updateMatrix();
