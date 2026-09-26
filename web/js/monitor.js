@@ -3,9 +3,11 @@ export const SCREEN_W = 1024, SCREEN_H = 590;
 const UP = '#28dc78', DOWN = '#ff4650', MUTED = '#8a92b8';
 
 export class Monitor {
-  constructor(days, ticker) {
+  constructor(days, ticker, summary, endingSec) {
     this.days = days;
     this.ticker = ticker;
+    this.summary = summary;
+    this.endingSec = endingSec;
     this.canvas = document.createElement('canvas');
     this.canvas.width = SCREEN_W;
     this.canvas.height = SCREEN_H;
@@ -99,6 +101,53 @@ export class Monitor {
       g.font = 'bold 150px system-ui';
       g.fillText(action, SCREEN_W / 2, SCREEN_H / 2 + 50);
     }
+    if (kind === 'ending') this.drawResult(p * this.endingSec);
     g.textAlign = 'left';
+  }
+
+  // final scorecard that pops over the chart once the last candle is in
+  drawResult(sec) {
+    const { g, summary, days } = this;
+    const pop = Math.min(Math.max((sec - 0.3) / 0.35, 0), 1);
+    if (pop === 0) return;
+    const fly = summary.fly_return, hold = summary.hold_return, lost = fly < 0;
+    const s = 1 + 0.12 * Math.sin(pop * Math.PI); // small overshoot as it lands
+    g.save();
+    g.fillStyle = `rgba(5,7,15,${0.95 * pop})`;
+    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    if (lost) { // slow red alarm pulse
+      const a = 0.35 + 0.35 * Math.sin(sec * 5);
+      g.strokeStyle = `rgba(255,70,80,${a * pop})`;
+      g.lineWidth = 14;
+      g.strokeRect(7, 7, SCREEN_W - 14, SCREEN_H - 14);
+    }
+    g.globalAlpha = pop;
+    g.translate(SCREEN_W / 2, SCREEN_H / 2);
+    g.scale(s, s);
+    g.textAlign = 'center';
+    g.fillStyle = MUTED;
+    g.font = 'bold 34px system-ui';
+    g.fillText(`${days.length}-DAY RESULT`, 0, -200);
+    const col = (x, label, ret, size) => {
+      g.fillStyle = '#dfe3f5';
+      g.font = 'bold 36px system-ui';
+      g.fillText(label, x, -120);
+      g.fillStyle = ret >= 0 ? UP : DOWN;
+      g.font = `900 ${size}px system-ui`;
+      g.fillText(`${ret >= 0 ? '+' : ''}${(ret * 100).toFixed(1)}%`, x, -120 + size * 0.95);
+    };
+    col(-235, '🪰 FLY', fly, 120);
+    col(245, 'BUY & HOLD', hold, 84);
+    g.fillStyle = MUTED;
+    g.font = 'bold 36px system-ui';
+    g.fillText('vs', 5, -30);
+    const pnl = summary.start_cash * fly;
+    g.fillStyle = lost ? DOWN : UP;
+    g.font = 'bold 44px system-ui';
+    g.fillText(`${pnl < 0 ? '−' : '+'}$${Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`, -235, 115);
+    g.fillStyle = MUTED;
+    g.font = '24px system-ui';
+    g.fillText(`${summary.n_trades} trades · paper trading on past data · not investment advice`, 0, 215);
+    g.restore();
   }
 }

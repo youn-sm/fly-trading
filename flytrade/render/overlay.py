@@ -12,7 +12,7 @@ CHART = (50, 1180, 1030, 1480)  # x0, y0, x1, y1
 HUD = (560, 290, 1030, 630)
 POP_X = 300  # BUY!/SELL! sit in the empty column left of the HUD, clear of the fly below
 MINI = (440, 170)  # mini brain size inside the HUD
-EVENT_TEXT = {"BUY": ("BUY!", "냠냠 · 매수", UP), "SELL": ("SELL!", "퉤! · 매도", DOWN)}
+EVENT_TEXT = {"BUY": ("BUY!", "yum · buy", UP), "SELL": ("SELL!", "yuck! · sell", DOWN)}
 
 
 @dataclass
@@ -81,14 +81,14 @@ class Overlay:
         d.text((90, 140), f"{self.ticker} · {day['date']}", font=font(34), fill=(170, 180, 210))
         d.text((90, 185), f"${day['close']:,.2f}", font=font(66, display=True), fill=WHITE)
         ret = day["equity"] / self.start_cash - 1
-        d.text((990, 140), "초파리 계좌", font=font(34), fill=(170, 180, 210), anchor="ra")
+        d.text((990, 140), "Fly's account", font=font(34), fill=(170, 180, 210), anchor="ra")
         d.text((990, 185), f"{ret:+.1%}", font=font(66, display=True), fill=UP if ret >= 0 else DOWN, anchor="ra")
 
     def _hud(self, img, d, day, pulse):
         x0, y0, x1, y1 = HUD
         d.rounded_rectangle(HUD, 30, fill=PANEL)
         img.alpha_composite(self._mini_image(day, pulse), (x0 + 15, y0 + 5))
-        rows = [("단맛", day["sugar_hz"], 200, SUGAR), ("쓴맛", day["bitter_hz"], 200, BITTER),
+        rows = [("Sweet", day["sugar_hz"], 200, SUGAR), ("Bitter", day["bitter_hz"], 200, BITTER),
                 ("MN9", day["mn9_hz"], 120, MN9)]
         for k, (label, hz, full, color) in enumerate(rows):
             y = y0 + 185 + k * 46
@@ -161,12 +161,12 @@ class Overlay:
         d = ImageDraw.Draw(layer)
         d.rounded_rectangle((50, 1080, 1030, 1560), 36, fill=(10, 12, 28, 235))
         fly, hold = self.summary["fly_return"], self.summary["hold_return"]
-        d.text((W / 2, 1140), f"{len(self.days)}거래일 결과", font=font(50), fill=WHITE, anchor="mm")
-        for x, label, ret in ((290, "초파리", fly), (790, "존버", hold)):
+        d.text((W / 2, 1140), f"{len(self.days)}-day result", font=font(50), fill=WHITE, anchor="mm")
+        for x, label, ret in ((290, "Fly", fly), (790, "Buy & hold", hold)):
             d.text((x, 1225), label, font=font(46), fill=(200, 205, 230), anchor="mm")
             d.text((x, 1340), f"{ret:+.1%}", font=font(110, display=True), fill=UP if ret >= 0 else DOWN, anchor="mm")
         d.text((W / 2, 1340), "vs", font=font(44), fill=(140, 145, 170), anchor="mm")
-        d.text((W / 2, 1490), f"매매 {self.summary['n_trades']}회 · 과거 데이터 모의투자 · 투자 조언 아님",
+        d.text((W / 2, 1490), f"{self.summary['n_trades']} trades · paper trading on past data · not investment advice",
                font=font(32), fill=(140, 145, 170), anchor="mm")
         scale = min(max(pop, 0.05), 1.0)
         box = layer.crop((0, 1080, W, 1560)).resize((int(W * scale), int(480 * scale)))

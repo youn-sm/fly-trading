@@ -29,10 +29,10 @@ ENDING_SEC = 3.5
 FLASH_OUT = 0.3  # white flash fading from the intro into the trading scene
 
 PLACEHOLDER_TEXT = {
-    "idle": "모니터 보는 초파리",
-    "buy": "주둥이로 쭉~ 냠냠 (매수)",
-    "sell": "퉤! 뱉기 (매도)",
-    "ending": "결과 보고 리액션",
+    "idle": "fly watching the monitor",
+    "buy": "proboscis out, yum (buy)",
+    "sell": "yuck! spit it out (sell)",
+    "ending": "reaction to the result",
 }
 
 
@@ -126,7 +126,7 @@ def placeholder(name: str) -> np.ndarray:
                           .repeat(W, axis=1))
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((140, 640, 940, 1060), 40, outline=(120, 130, 180), width=6)
-    d.text((W / 2, 780), f"AI 클립: {name}.mp4", font=font(56), fill=WHITE, anchor="mm")
+    d.text((W / 2, 780), f"AI clip: {name}.mp4", font=font(56), fill=WHITE, anchor="mm")
     d.text((W / 2, 890), PLACEHOLDER_TEXT.get(name, ""), font=font(44), fill=(180, 190, 230), anchor="mm")
     return np.asarray(img)
 

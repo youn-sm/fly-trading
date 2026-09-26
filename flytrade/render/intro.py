@@ -56,23 +56,23 @@ class Intro:
     def _labels(self, d: ImageDraw.ImageDraw, t: float, ms: float, theta: float):
         pop = ease_out_back((t - 0.2) / 0.5)
         if pop > 0.05:
-            d.text((W / 2, 250), "초파리 뇌", font=font(int(110 * pop)), fill=WHITE, anchor="mm")
-            d.text((W / 2, 360), f"뉴런 {self.n_neurons:,}개 · 시냅스 {self.n_synapses / 1e4:,.0f}만개",
+            d.text((W / 2, 250), "Fruit fly brain", font=font(int(110 * pop)), fill=WHITE, anchor="mm")
+            d.text((W / 2, 360), f"{self.n_neurons:,} neurons · {self.n_synapses / 1e6:.1f}M synapses",
                    font=font(46), fill=(190, 210, 255), anchor="mm")
-            d.text((W / 2, 420), "실제 FlyWire 커넥톰 데이터", font=font(36), fill=(120, 140, 190), anchor="mm")
+            d.text((W / 2, 420), "Real FlyWire connectome data", font=font(36), fill=(120, 140, 190), anchor="mm")
 
         if ms > 0:
-            d.text((W / 2, 1420), "주가 상승 = 단맛", font=font(64), fill=SUGAR, anchor="mm")
-            d.text((W / 2, 1500), f"미각 뉴런 자극 → {ms:5.1f} ms", font=font(40), fill=(230, 220, 190), anchor="mm")
+            d.text((W / 2, 1420), "Price up = sweet", font=font(64), fill=SUGAR, anchor="mm")
+            d.text((W / 2, 1500), f"Taste neurons stimulated → {ms:5.1f} ms", font=font(40), fill=(230, 220, 190), anchor="mm")
             xs, ys = self.cloud.project(self.sugar_rows, theta)
             x, y = xs.min(), ys.mean()
             d.line((x - 20, y, x - 90, y), fill=SUGAR, width=4)
-            d.text((x - 100, y), "단맛 뉴런", font=font(40), fill=SUGAR, anchor="rm")
+            d.text((x - 100, y), "Sweet neurons", font=font(40), fill=SUGAR, anchor="rm")
 
         if ms >= self.mn9_ms and len(self.mn9_rows):
             k = min((ms - self.mn9_ms) / (self.wave_span * 0.25), 1.0)
             x, y = (v[0] for v in self.cloud.project(self.mn9_rows[:1], theta))
             r = 30 + 40 * k
             d.ellipse((x - r, y - r, x + r, y + r), outline=MN9, width=8)
-            d.text((x + r + 20, y), "MN9 발화!", font=font(54), fill=MN9, anchor="lm")
-            d.text((W / 2, 1600), "먹는다 = 매수", font=font(72), fill=MN9, anchor="mm")
+            d.text((x + r + 20, y), "MN9 fires!", font=font(54), fill=MN9, anchor="lm")
+            d.text((W / 2, 1600), "Eat = BUY", font=font(72), fill=MN9, anchor="mm")

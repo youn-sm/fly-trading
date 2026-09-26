@@ -102,14 +102,43 @@ class Leg {
     this.tibia.rotation.z = t2;
     this.tarsus.rotation.z = phi - t1 - t2;
   }
+
+  // same chain, but the knee bends toward `pole` (a direction) and the tarsus points along `tdir`,
+  // so the elbows can stick out sideways (e.g. hands on the head)
+  reachPole(origin, target, tdir, pole) {
+    const { a, b, c } = this;
+    const ankle = target.clone().addScaledVector(tdir, -c);
+    const u = ankle.clone().sub(origin);
+    const d = THREE.MathUtils.clamp(u.length(), Math.abs(a - b) + 1e-3, a + b - 1e-3);
+    u.normalize();
+    const w = pole.clone().addScaledVector(u, -pole.dot(u)).normalize();
+    const alpha = Math.acos((a * a + d * d - b * b) / (2 * a * d));
+    const femurDir = u.clone().multiplyScalar(Math.cos(alpha)).addScaledVector(w, Math.sin(alpha));
+    const n = new THREE.Vector3().crossVectors(u, w).normalize();
+    const y = new THREE.Vector3().crossVectors(n, femurDir);
+    this.root.position.copy(origin);
+    this.root.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(femurDir, y, n));
+    this.femur.rotation.set(0, 0, 0);
+    this.tibia.rotation.set(0, 0, -(Math.PI - Math.acos((a * a + b * b - d * d) / (2 * a * b))));
+    this.tibia.updateMatrix();
+    const inv = this.root.quaternion.clone().multiply(this.tibia.quaternion).invert();
+    this.tarsus.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tdir.clone().applyQuaternion(inv).normalize());
+  }
 }
 
+const POSE = { typing: 0, feed: 0, groom: 0, buzz: 0, droop: 0, lean: 0, shock: 0, despair: 0 };
 const MODES = {
-  idle: { typing: 1, feed: 0, groom: 0, buzz: 0, droop: 0 },
-  buy: { typing: 0, feed: 1, groom: 0, buzz: 1, droop: 0 },
-  sell: { typing: 0, feed: 0, groom: 1, buzz: 0, droop: 0 },
-  lose: { typing: 0, feed: 0, groom: 0, buzz: 0, droop: 1 },
+  idle: { ...POSE, typing: 1 },
+  buy: { ...POSE, feed: 1, buzz: 1 },
+  sell: { ...POSE, groom: 1 },
+  lose: { ...POSE, droop: 1 },
+  // ending on a loss: lean in to read the result → jolt back → clutch the head and sob
+  check: { ...POSE, lean: 1 },
+  shock: { ...POSE, shock: 1 },
+  despair: { ...POSE, despair: 1 },
 };
+const TEARS = 8;
+const TEAR_CYCLE = 0.9; // s for one tear to roll off and fall
 
 export class Fly {
   constructor() {
@@ -233,6 +262,18 @@ export class Fly {
       return { hinge, s };
     });
 
+    // tears roll off the bottom of each eye while sobbing
+    const tearMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9fd8ff, emissive: 0x2a6fb0, emissiveIntensity: 0.5, roughness: 0.05, transmission: 0.3, transparent: true, opacity: 0.9,
+    });
+    this.tears = Array.from({ length: TEARS }, (_, i) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), tearMat);
+      m.scale.set(1, 1.35, 1);
+      m.visible = false;
+      this.pivot.add(m);
+      return { m, s: i % 2 ? 1 : -1, phase: (Math.floor(i / 2) / (TEARS / 2)) * TEAR_CYCLE };
+    });
+
     // legs hang off the pivot so their targets can live in a stable frame
     const LEN = { front: [0.6, 0.55, 0.38], mid: [0.62, 0.6, 0.4], hind: [0.66, 0.62, 0.42] };
     const ATTACH = { front: [0.28, -0.35, 0.18], mid: [0.02, -0.42, 0.24], hind: [-0.25, -0.38, 0.22] };
@@ -260,14 +301,18 @@ export class Fly {
     const t = this.t;
     const k = 1 - Math.exp(-dt * 10);
     for (const key in this.state) this.state[key] += (this.target[key] - this.state[key]) * k;
-    const { typing, feed, groom, buzz, droop } = this.state;
+    const { typing, feed, groom, buzz, droop, lean, shock, despair } = this.state;
+    const sob = despair * Math.max(0, Math.sin(t * 9)) * (0.6 + 0.4 * Math.sin(t * 1.3)); // shaky breaths
 
-    this.pivot.rotation.y = 0.35 * groom;
-    this.body.rotation.z = SIT_PITCH - 0.3 * feed - 0.4 * droop + 0.015 * Math.sin(t * 1.6);
-    this.abdomen.scale.setScalar(1 + 0.012 * Math.sin(t * 2.2));
+    this.pivot.rotation.y = 0.35 * groom - 0.95 * despair; // can't bear to look: turn from the screen toward the camera
+    this.body.rotation.z = SIT_PITCH - 0.3 * feed - 0.4 * droop - 0.28 * lean + 0.3 * shock - 0.42 * despair
+      + 0.015 * Math.sin(t * 1.6) + 0.035 * sob;
+    this.body.position.y = 0.04 * shock * Math.abs(Math.sin(t * 40)) - 0.08 * despair + 0.02 * sob;
+    this.abdomen.scale.setScalar(1 + 0.012 * Math.sin(t * 2.2) + 0.03 * sob);
 
-    this.head.rotation.z = -SIT_PITCH - 0.15 - 0.2 * feed + 0.45 * groom - 0.3 * droop + 0.03 * Math.sin(t * 0.9);
-    this.head.rotation.y = 0.08 * Math.sin(t * 0.7) * typing;
+    this.head.rotation.z = -SIT_PITCH - 0.15 - 0.2 * feed + 0.45 * groom - 0.3 * droop - 0.12 * lean + 0.35 * shock
+      - 0.45 * despair + 0.03 * Math.sin(t * 0.9);
+    this.head.rotation.y = 0.08 * Math.sin(t * 0.7) * typing + 0.3 * Math.sin(t * 2.4) * despair; // "no, no, no"
 
     // proboscis: tucked (e=0) → reaching down-forward (e=1), pumping while feeding
     const e = THREE.MathUtils.clamp(feed + 0.06 * Math.sin(t * 16) * feed, 0, 1.1);
@@ -281,19 +326,33 @@ export class Fly {
     this.labellum.rotation.z = 0.3 * Math.sin(t * 16) * feed;
 
     this.antennae.forEach((a, i) => {
-      a.rotation.z = 0.15 * Math.sin(t * 3.1 + i * 1.7) + 0.1 * Math.sin(t * 7.3 + i);
+      const calm = 1 - shock - despair;
+      a.rotation.z = (0.15 * Math.sin(t * 3.1 + i * 1.7) + 0.1 * Math.sin(t * 7.3 + i)) * Math.max(calm, 0.2)
+        + 0.5 * shock - 0.55 * despair; // spring up in shock, go limp in despair
     });
 
     for (const { hinge, s } of this.wings) {
-      const flap = buzz * Math.sin(t * 90);
-      hinge.rotation.y = Math.PI + s * (0.2 + 0.1 * droop + 0.35 * buzz + 0.25 * flap);
-      hinge.rotation.z = 0.78 + 0.3 * buzz * Math.abs(flap) - 0.1 * droop; // lie along the abdomen
+      const flap = buzz * Math.sin(t * 90) + 0.5 * shock * Math.sin(t * 70);
+      hinge.rotation.y = Math.PI + s * (0.2 + 0.1 * droop + 0.35 * buzz + 0.45 * shock + 0.25 * flap - 0.08 * despair);
+      hinge.rotation.z = 0.78 + 0.3 * (buzz + shock) * Math.abs(flap) - 0.1 * droop - 0.12 * despair; // lie along the abdomen
       hinge.rotation.x = s * 0.45; // roof-like tilt so a wing is never seen edge-on
     }
 
     this.body.updateMatrix();
     this.head.updateMatrix();
-    const mouth = new THREE.Vector3(0.3, -0.25, 0).applyMatrix4(this.head.matrix).applyMatrix4(this.body.matrix);
+    const toPivot = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(this.head.matrix).applyMatrix4(this.body.matrix);
+    const mouth = toPivot(0.3, -0.25, 0);
+
+    for (const { m, s, phase } of this.tears) {
+      const age = (t + phase) % TEAR_CYCLE / TEAR_CYCLE;
+      m.visible = despair > 0.5;
+      if (!m.visible) continue;
+      const eye = toPivot(0.3, -0.12, s * 0.36);
+      const fall = Math.max(0, age - 0.25) / 0.75;
+      m.position.copy(eye).add(new THREE.Vector3(0.12 * fall, -1.6 * fall * fall, s * 0.08 * fall));
+      m.scale.setScalar(THREE.MathUtils.smoothstep(age, 0, 0.25) * (1 - 0.5 * fall));
+      m.scale.y *= 1.35;
+    }
     for (const { leg, pair, s, attach } of this.legs) {
       const origin = attach.clone().applyMatrix4(this.body.matrix);
       let target, phi;
@@ -303,9 +362,22 @@ export class Fly {
         const rest = this.keyboard.clone().add(new THREE.Vector3(-0.15, 0, s * 0.38));
         const rub = mouth.clone().add(new THREE.Vector3(0.1 + 0.08 * Math.sin(t * 13 + phase), -0.05 + 0.06 * Math.cos(t * 13 + phase), s * 0.1));
         const hang = new THREE.Vector3(0.55, -0.95, s * 0.45);
-        target = type.multiplyScalar(typing).add(rest.multiplyScalar(feed)).add(rub.multiplyScalar(groom)).add(hang.multiplyScalar(droop))
-          .divideScalar(typing + feed + groom + droop || 1);
-        phi = THREE.MathUtils.lerp(-1.2, 0.4, groom);
+        const grip = rest.clone().add(new THREE.Vector3(0.2, 0.02, -s * 0.12)); // lean in, hands on the desk
+        const up = toPivot(-0.05, 0.75, s * 0.55); // hands thrown up beside the head
+        const clutch = toPivot(0.0 + 0.03 * Math.sin(t * 9 + phase), 0.36, s * (0.2 + 0.02 * sob)); // hands clasped over the top of the head
+        const w = [typing, feed, groom, droop, lean, shock, despair];
+        target = [type, rest, rub, hang, grip, up, clutch]
+          .reduce((acc, v, i) => acc.add(v.clone().multiplyScalar(w[i])), new THREE.Vector3())
+          .divideScalar(w.reduce((a, b) => a + b, 0) || 1);
+        const rest6 = typing + feed + droop + lean + groom + shock;
+        phi = (-1.2 * (typing + feed + droop + lean) + 0.4 * groom + 0.9 * shock) / (rest6 || 1);
+        // blend from the usual upright-knee pose into elbows-out, palms-up-the-sides-of-the-head
+        const horiz = new THREE.Vector3(target.x - origin.x, 0, target.z - origin.z).normalize();
+        const tdir = horiz.multiplyScalar(Math.cos(phi)).add(new THREE.Vector3(0, Math.sin(phi), 0))
+          .lerp(new THREE.Vector3(0.1, 0.45, -s).normalize(), despair).normalize();
+        const pole = new THREE.Vector3(0, 1, 0).lerp(new THREE.Vector3(0.1, 0.1, s).normalize(), despair).normalize();
+        leg.reachPole(origin, target, tdir, pole);
+        continue;
       } else {
         // dangle over the front edge of the seat
         target = new THREE.Vector3(pair === 'mid' ? 0.45 : 0.1, this.seatY - (pair === 'mid' ? 0.5 : 0.65), s * (pair === 'mid' ? 0.5 : 0.72));
