@@ -1,0 +1,22 @@
+:root {
+  --bg: #06070d;
+  --panel: #0d0f1c;
+  --line: #242848;
+  --text: #e7e9f5;
+  --muted: #8a8fb0;
+  --sugar: #ffc440;
+  --bitter: #78e678;
+  --mn9: #ff46a0;
+  --up: #28dc78;
+  --down: #ff4650;
+  --brain: #4696ff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font-family: "Apple SD Gothic Neo", "Pretendard", system-ui, sans-serif; }
+body { display: flex; }
+#stage { flex: 1; position: relative; min-width: 0; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+#panel { width: clamp(300px, 27vw, 460px); background: var(--panel); border-left: 1px solid var(--line);
+  padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
