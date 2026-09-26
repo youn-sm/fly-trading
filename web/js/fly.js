@@ -1,11 +1,11 @@
 // Procedural fruit fly. Faces +x, +y up. Every joint is a Group so it can be animated.
+// It has one pose: passed out face-down on the desk, sitting on the stool, only breathing.
 import * as THREE from 'three';
 
 const COLOR = {
   amber: 0xd98a22, amberDeep: 0xb0621a, band: 0x5a2c0a,
   tarsus: 0x3a220c, eye: 0xd0121e, hair: 0x2b1707,
 };
-const SIT_PITCH = 0.9; // body pitch while sitting (rad), head up
 
 const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...extra });
 
@@ -85,14 +85,6 @@ class Leg {
     this.tarsus.position.x = b;
     this.tibia.add(this.tarsus);
     this.tarsus.add(rod(c, 0.032, 0.018, tipMaterial, 8));
-    // a wider "palm" at the tip, only grown while the fly buries its face in its hands
-    this.pad = new THREE.Group();
-    this.pad.position.x = c * 0.72;
-    this.pad.scale.setScalar(0);
-    this.tarsus.add(this.pad);
-    const palm = mesh(new THREE.SphereGeometry(0.07, 14, 10), tipMaterial);
-    palm.scale.set(2.4, 1.3, 1.6);
-    this.pad.add(palm);
   }
 
   // place the tarsus tip on `target` with the tarsus at absolute pitch `phi` (both in the parent frame)
@@ -134,43 +126,23 @@ class Leg {
   }
 }
 
-const POSE = { typing: 0, feed: 0, groom: 0, buzz: 0, droop: 0, lean: 0, shock: 0, despair: 0 };
-const MODES = {
-  idle: { ...POSE, typing: 1 },
-  buy: { ...POSE, feed: 1, buzz: 1 },
-  sell: { ...POSE, groom: 1 },
-  lose: { ...POSE, droop: 1 },
-  // ending on a loss: lean in to read the result → jolt back → clutch the head and sob
-  check: { ...POSE, lean: 1 },
-  shock: { ...POSE, shock: 1 },
-  despair: { ...POSE, despair: 1 },
+// all angles in radians, positions relative to the fly's origin
+const SLUMP = {
+  body: -0.3,      // thorax tipped forward over the desk edge
+  abdomen: 1.15,   // abdomen hangs back and down onto the stool
+  head: -0.75,     // face down on the desk, on the folded front legs
+  headRoll: 0.35,  // cheek on the "arms", turned a little toward the camera
+  wings: -0.75,    // folded down along the abdomen
+  breath: 4.2,     // s per breath, slow and heavy
 };
-const TEARS = 10;
-const SMOKE = 90;
-const DRAG_EVERY = 5.5; // s between drags on the cigarette
-
-function smokeSprite() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(240,240,245,1)');
-  grad.addColorStop(0.45, 'rgba(220,222,230,0.6)');
-  grad.addColorStop(1, 'rgba(200,200,210,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
-}
-const TEAR_CYCLE = 0.9; // s for one tear to roll off and fall
 
 export class Fly {
   constructor() {
     this.group = new THREE.Group();
-    this.pivot = new THREE.Group(); // yaw for turning away from the screen
+    this.pivot = new THREE.Group();
     this.group.add(this.pivot);
     this.t = 0;
-    this.state = { ...MODES.idle };
-    this.target = { ...MODES.idle };
+    this.pose = { ...SLUMP }; // live-tweakable from the console via __debug.fly.pose
 
     const amber = std(COLOR.amber, { roughness: 0.42 });
     const deep = std(COLOR.amberDeep, { roughness: 0.5 });
@@ -285,52 +257,6 @@ export class Fly {
       return { hinge, s };
     });
 
-    // tears roll off the bottom of each eye while sobbing
-    const tearMat = new THREE.MeshPhysicalMaterial({
-      color: 0x9fd8ff, emissive: 0x2a6fb0, emissiveIntensity: 0.5, roughness: 0.05, transmission: 0.3, transparent: true, opacity: 0.9,
-    });
-    this.tears = Array.from({ length: TEARS }, (_, i) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), tearMat);
-      m.scale.set(1, 1.35, 1);
-      m.visible = false;
-      this.pivot.add(m);
-      return { m, s: i % 2 ? 1 : -1, phase: (Math.floor(i / 2) / (TEARS / 2)) * TEAR_CYCLE };
-    });
-
-    // cigarette hanging from the corner of the mouth (camera side), ember glows on each drag
-    this.cig = new THREE.Group();
-    this.cig.position.set(0.33, -0.2, 0.1);
-    this.cig.rotation.set(0, -0.55, -0.45);
-    this.cig.scale.setScalar(1.7);
-    this.head.add(this.cig);
-    const filter = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.09, 12), std(0xd98c3a, { roughness: 0.8 }));
-    filter.rotation.z = Math.PI / 2;
-    filter.position.x = 0.045;
-    const paper = mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.24, 12), std(0xf4f1ea, { roughness: 0.9 }));
-    paper.rotation.z = Math.PI / 2;
-    paper.position.x = 0.21;
-    this.emberMat = new THREE.MeshStandardMaterial({ color: 0x3a2a22, emissive: 0xff5a10, emissiveIntensity: 1.5, roughness: 1 });
-    const ember = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.024, 0.03, 12), this.emberMat);
-    ember.rotation.z = Math.PI / 2;
-    ember.position.x = 0.345;
-    this.cigTip = new THREE.Object3D();
-    this.cigTip.position.x = 0.36;
-    this.cig.add(filter, paper, ember, this.cigTip);
-    this.emberLight = new THREE.PointLight(0xff6a20, 0, 0.8);
-    this.emberLight.position.x = 0.4;
-    this.cig.add(this.emberLight);
-
-    // smoke lives in the fly's group so it drifts straight up instead of following the head
-    const smokeTex = smokeSprite();
-    this.smoke = Array.from({ length: SMOKE }, () => {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0xb8bcc6, transparent: true, depthWrite: false, opacity: 0 }));
-      sp.visible = false;
-      this.group.add(sp);
-      return { sp, age: 1, life: 1, vel: new THREE.Vector3(), size: 0.1 };
-    });
-    this.smokeNext = 0;
-    this.smokeAcc = 0;
-
     // legs hang off the pivot so their targets can live in a stable frame
     const LEN = { front: [0.6, 0.55, 0.38], mid: [0.62, 0.6, 0.4], hind: [0.66, 0.62, 0.42] };
     const ATTACH = { front: [0.28, -0.35, 0.18], mid: [0.02, -0.42, 0.24], hind: [-0.25, -0.38, 0.22] };
@@ -343,152 +269,57 @@ export class Fly {
         this.legs.push({ leg, pair, s, attach: new THREE.Vector3(ax, ay, s * az) });
       }
     }
-    // where the front legs type and where the other legs stand, relative to the fly (set by the scene)
-    this.keyboard = new THREE.Vector3(1.2, -0.35, 0);
-    this.seatY = -0.95;
+    // desk top and seat top relative to the fly (set by the scene)
+    this.deskY = -0.4;
+    this.seatY = -1.03;
     this.update(0);
-  }
-
-  // a drag every few seconds: ember flares, then a puff is exhaled from the mouth; a thin wisp rises from the tip
-  updateSmoke(dt, t, despair) {
-    const cycle = t % DRAG_EVERY;
-    const drag = Math.max(0, Math.sin(Math.PI * THREE.MathUtils.clamp((cycle - 0.2) / 0.9, 0, 1)));
-    const exhale = cycle > 1.6 && cycle < 2.6;
-    this.emberMat.emissiveIntensity = 1.2 + 3 * drag + 0.3 * Math.sin(t * 7);
-    this.emberLight.intensity = 0.4 + 1.6 * drag;
-    this.cig.rotation.z = -0.45 + 0.12 * drag - 0.35 * despair; // lifts on a drag, droops when all is lost
-    if (dt <= 0) return;
-    this.group.updateWorldMatrix(true, true);
-    const local = (obj) => this.group.worldToLocal(obj.getWorldPosition(new THREE.Vector3()));
-    const tip = local(this.cigTip);
-    const mouth = this.group.worldToLocal(this.head.localToWorld(new THREE.Vector3(0.38, -0.2, 0.1)));
-    const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(this.pivot.quaternion);
-    const emit = (pos, vel, size, life) => {
-      const p = this.smoke[this.smokeNext];
-      this.smokeNext = (this.smokeNext + 1) % SMOKE;
-      p.sp.position.copy(pos);
-      p.vel.copy(vel);
-      Object.assign(p, { age: 0, life, size });
-      p.sp.visible = true;
-    };
-    this.smokeAcc += dt * (exhale ? 20 : 10);
-    while (this.smokeAcc >= 1) {
-      this.smokeAcc -= 1;
-      const j = () => (Math.random() - 0.5) * 0.08;
-      if (exhale) emit(mouth, forward.clone().multiplyScalar(0.55).add(new THREE.Vector3(j(), 0.12 + j(), j())), 0.16, 2.2);
-      else emit(tip, new THREE.Vector3(j(), 0.3, j()), 0.12, 2.8);
-    }
-    for (const p of this.smoke) {
-      if (!p.sp.visible) continue;
-      p.age += dt;
-      const a = p.age / p.life;
-      if (a >= 1) { p.sp.visible = false; continue; }
-      p.vel.multiplyScalar(1 - dt * 0.6).add(new THREE.Vector3(0.05 * Math.sin(t * 2 + p.size * 90), 0.18, 0).multiplyScalar(dt));
-      p.sp.position.addScaledVector(p.vel, dt);
-      p.sp.scale.setScalar(p.size * (1 + 3.5 * a));
-      p.sp.material.opacity = 0.55 * Math.min(1, a * 5) * (1 - a) ** 1.5;
-    }
-  }
-
-  setMode(mode) {
-    this.target = { ...MODES[mode] };
   }
 
   update(dt) {
     this.t += dt;
     const t = this.t;
-    const k = 1 - Math.exp(-dt * 10);
-    for (const key in this.state) this.state[key] += (this.target[key] - this.state[key]) * k;
-    const { typing, feed, groom, buzz, droop, lean, shock, despair } = this.state;
-    const sob = despair * Math.max(0, Math.sin(t * 9)) * (0.6 + 0.4 * Math.sin(t * 1.3)); // shaky breaths
-    const wail = despair * Math.max(0, Math.sin(t * 2.2)) ** 3; // every ~3 s the head flings further back in a wail
+    const p = this.pose;
+    const breath = Math.sin((t / p.breath) * Math.PI * 2);
 
-    this.pivot.rotation.y = 0.35 * groom - 0.95 * despair; // can't bear to look: turn from the screen toward the camera
-    this.pivot.rotation.x = despair * (0.07 * Math.sin(t * 1.4) + 0.02 * sob); // rocking side to side
-    this.body.rotation.z = SIT_PITCH - 0.3 * feed - 0.4 * droop - 0.28 * lean + 0.3 * shock + 0.3 * despair
-      + 0.12 * wail + 0.015 * Math.sin(t * 1.6) + 0.035 * sob;
-    this.body.position.y = 0.04 * shock * Math.abs(Math.sin(t * 40)) + 0.03 * wail + 0.02 * sob;
-    this.abdomen.scale.setScalar(1 + 0.012 * Math.sin(t * 2.2) + 0.03 * sob + 0.04 * wail);
+    this.body.rotation.z = p.body + 0.012 * breath;
+    this.body.position.y = 0.012 * breath;
+    this.abdomen.rotation.z = p.abdomen;
+    this.abdomen.scale.set(1, 1 + 0.03 * breath, 1 + 0.03 * breath);
+    this.head.rotation.set(p.headRoll, 0, p.head - 0.012 * breath);
+    this.antennae.forEach((a) => { a.rotation.z = -0.5; });
 
-    // despair: head thrown back to the sky, face buried in both hands
-    this.head.rotation.z = -SIT_PITCH - 0.15 - 0.2 * feed + 0.45 * groom - 0.3 * droop - 0.12 * lean + 0.35 * shock
-      + 0.55 * despair + 0.3 * wail + 0.03 * Math.sin(t * 0.9);
-    this.head.rotation.y = 0.08 * Math.sin(t * 0.7) * typing + 0.22 * Math.sin(t * 1.7) * despair; // "no, no, no"
-
-    // proboscis: tucked (e=0) → reaching down-forward (e=1), pumping while feeding
-    const e = THREE.MathUtils.clamp(feed + 0.06 * Math.sin(t * 16) * feed, 0, 1.1);
-    const stretch = 1 + 1.0 * e;
-    this.proboscis.rotation.z = THREE.MathUtils.lerp(-2.4, -0.15, e);
-    this.rostrum.scale.x = stretch;
-    this.haustellum.position.x = 0.22 * stretch;
-    this.haustellum.rotation.z = THREE.MathUtils.lerp(1.6, 0.05, e);
-    this.haustellumRod.scale.x = stretch;
-    this.labellum.position.x = 0.3 * stretch;
-    this.labellum.rotation.z = 0.3 * Math.sin(t * 16) * feed;
-
-    this.antennae.forEach((a, i) => {
-      const calm = 1 - shock - despair;
-      a.rotation.z = (0.15 * Math.sin(t * 3.1 + i * 1.7) + 0.1 * Math.sin(t * 7.3 + i)) * Math.max(calm, 0.2)
-        + 0.5 * shock - 0.55 * despair + 0.5 * wail; // spring up in shock, go limp in despair
-    });
+    // proboscis folded away under the head
+    this.proboscis.rotation.z = -2.4;
+    this.haustellum.position.x = 0.22;
+    this.haustellum.rotation.z = 1.6;
+    this.labellum.position.x = 0.3;
 
     for (const { hinge, s } of this.wings) {
-      const flap = buzz * Math.sin(t * 90) + 0.5 * shock * Math.sin(t * 70);
-      hinge.rotation.y = Math.PI + s * (0.2 + 0.1 * droop + 0.35 * buzz + 0.45 * shock + 0.25 * flap - 0.08 * despair);
-      hinge.rotation.z = 0.78 + 0.3 * (buzz + shock) * Math.abs(flap) - 0.1 * droop - 0.12 * despair; // lie along the abdomen
-      hinge.rotation.x = s * 0.45; // roof-like tilt so a wing is never seen edge-on
+      hinge.rotation.y = Math.PI + s * 0.18;
+      hinge.rotation.z = p.wings + 0.01 * breath;
+      hinge.rotation.x = s * 0.45;
     }
 
     this.body.updateMatrix();
     this.head.updateMatrix();
     const toPivot = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(this.head.matrix).applyMatrix4(this.body.matrix);
-    const dirToPivot = (x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(this.head.quaternion).applyQuaternion(this.body.quaternion).normalize();
-    const mouth = toPivot(0.3, -0.25, 0);
-
-    for (const { m, s, phase } of this.tears) {
-      const age = (t + phase) % TEAR_CYCLE / TEAR_CYCLE;
-      m.visible = despair > 0.5;
-      if (!m.visible) continue;
-      const eye = toPivot(0.3, -0.16, s * 0.4); // leaking out from under the hands
-      const fall = Math.max(0, age - 0.25) / 0.75;
-      m.position.copy(eye).add(new THREE.Vector3(0.12 * fall, -1.6 * fall * fall, s * 0.08 * fall));
-      m.scale.setScalar(THREE.MathUtils.smoothstep(age, 0, 0.25) * (1 - 0.5 * fall));
-      m.scale.y *= 1.35;
-    }
-    this.updateSmoke(dt, t, despair);
+    const chin = toPivot(0.2, -0.3, 0);
 
     for (const { leg, pair, s, attach } of this.legs) {
       const origin = attach.clone().applyMatrix4(this.body.matrix);
-      let target, phi;
       if (pair === 'front') {
-        const phase = s > 0 ? 0 : Math.PI;
-        const type = this.keyboard.clone().add(new THREE.Vector3(0.05 * Math.sin(t * 2 + phase), 0.1 * Math.max(0, Math.sin(t * 15 + phase)), s * 0.22));
-        const rest = this.keyboard.clone().add(new THREE.Vector3(-0.15, 0, s * 0.38));
-        const rub = mouth.clone().add(new THREE.Vector3(0.1 + 0.08 * Math.sin(t * 13 + phase), -0.05 + 0.06 * Math.cos(t * 13 + phase), s * 0.1));
-        const hang = new THREE.Vector3(0.55, -0.95, s * 0.45);
-        const grip = rest.clone().add(new THREE.Vector3(0.2, 0.02, -s * 0.12)); // lean in, hands on the desk
-        const up = toPivot(-0.05, 0.75, s * 0.55); // hands thrown up beside the head
-        const clutch = toPivot(0.46 + 0.02 * Math.sin(t * 9 + phase), 0.1 + 0.03 * sob, s * 0.2); // palms pressed over the eyes
-        const w = [typing, feed, groom, droop, lean, shock, despair];
-        target = [type, rest, rub, hang, grip, up, clutch]
-          .reduce((acc, v, i) => acc.add(v.clone().multiplyScalar(w[i])), new THREE.Vector3())
-          .divideScalar(w.reduce((a, b) => a + b, 0) || 1);
-        const rest6 = typing + feed + droop + lean + groom + shock;
-        phi = (-1.2 * (typing + feed + droop + lean) + 0.4 * groom + 0.9 * shock) / (rest6 || 1);
-        // blend from the usual upright-knee pose into elbows-out, palms-up-the-sides-of-the-head
-        const horiz = new THREE.Vector3(target.x - origin.x, 0, target.z - origin.z).normalize();
-        const tdir = horiz.multiplyScalar(Math.cos(phi)).add(new THREE.Vector3(0, Math.sin(phi), 0))
-          .lerp(dirToPivot(0.1, 1, -s * 0.6), despair).normalize(); // fingers up and across the eyes
-        const pole = new THREE.Vector3(0, 1, 0).lerp(new THREE.Vector3(0.2, -0.5, s).normalize(), despair).normalize(); // elbows out and down
+        // forearms folded flat on the desk under the head, crossing each other, elbows out
+        const target = new THREE.Vector3(chin.x + 0.1, this.deskY + 0.04, -s * 0.28);
+        const tdir = new THREE.Vector3(0.25, 0, -s).normalize();
+        const pole = new THREE.Vector3(0.1, -0.2, s).normalize();
         leg.reachPole(origin, target, tdir, pole);
-        leg.pad.scale.setScalar(despair);
-        continue;
+      } else if (pair === 'mid') {
+        // dangling limp below the desk edge
+        leg.reach(origin, new THREE.Vector3(0.35, this.deskY - 0.8, s * 0.62), -1.45);
       } else {
-        // dangle over the front edge of the seat
-        target = new THREE.Vector3(pair === 'mid' ? 0.45 : 0.1, this.seatY - (pair === 'mid' ? 0.5 : 0.65), s * (pair === 'mid' ? 0.5 : 0.72));
-        phi = -1.45;
+        // splayed on the stool
+        leg.reach(origin, new THREE.Vector3(-0.55, this.seatY + 0.03, s * 0.75), -0.4);
       }
-      leg.reach(origin, target, phi);
     }
   }
 }

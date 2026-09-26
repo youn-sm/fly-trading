@@ -1,166 +1,79 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js';
 import { Fly } from './fly.js';
-import { buildRoom, FLY_POS } from './scene.js';
-import { Monitor } from './monitor.js';
-import { BrainView } from './brainview.js';
-import { buildSegments, stateAt, ENDING_SEC, LOSS_ENDING_SEC } from './timeline.js';
+import { buildRoom, FLY_POS, SCREEN } from './scene.js';
+import { youtubeScreen } from './tv.js';
 
-const [timeline, brain] = await Promise.all(['data/timeline.json', 'data/brain.json'].map((f) => fetch(f).then((r) => r.json())));
-const { days, summary, ticker, params } = timeline;
-const lost = summary.fly_return < 0;
-const schedule = buildSegments(days, lost ? LOSS_ENDING_SEC : ENDING_SEC);
+const VIDEO_ID = '6-8E4Nirh9s'; // Caramella Girls - Caramelldansen
 
-// 3D scene
+// WebGL on top (transparent where the TV screen is), the YouTube player underneath
 const stage = document.getElementById('stage');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 stage.appendChild(renderer.domElement);
+const css = new CSS3DRenderer();
+document.getElementById('video').appendChild(css.domElement);
+
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-camera.position.set(0.3, 3.4, 7.3);
+const cssScene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+
+// over the fly's shoulder, looking past it at the TV
+const HOME = { pos: new THREE.Vector3(-3.9, 4.2, -2.3), target: new THREE.Vector3(2.1, 2.25, -0.05) };
+camera.position.copy(HOME.pos);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(1.2, 2.15, 0);
+controls.target.copy(HOME.target);
 controls.enableDamping = true;
 
-const monitor = new Monitor(days, ticker, summary, schedule.segs.at(-1).dur);
-document.getElementById('account').classList.toggle('win', !lost);
-const room = buildRoom(scene, monitor.canvas);
+const room = buildRoom(scene);
 const fly = new Fly();
 fly.group.position.copy(FLY_POS);
-fly.keyboard.copy(room.keyboard);
+fly.deskY = room.deskY;
 fly.seatY = room.seatY;
 scene.add(fly.group);
 
-const brainView = new BrainView(document.getElementById('brain-canvas'), brain);
-document.getElementById('brain-sub').textContent =
-  `${brain.n_neurons.toLocaleString()} neurons · ${(brain.n_synapses / 1e6).toFixed(1)}M synapses · FlyWire`;
+const tv = youtubeScreen(room.screen, SCREEN, VIDEO_ID);
+cssScene.add(tv.object);
+const unmute = () => tv.unmute();
+addEventListener('pointerdown', unmute);
+addEventListener('keydown', unmute);
 
+// keep the same horizontal field of view in a tall (phone-shaped) window
+const H_FOV = 50;
 function resize() {
-  renderer.setSize(stage.clientWidth, stage.clientHeight, false);
-  camera.aspect = stage.clientWidth / stage.clientHeight;
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  css.setSize(w, h);
+  camera.aspect = w / h;
+  const vFromH = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(H_FOV / 2)) / camera.aspect));
+  camera.fov = Math.max(40, vFromH);
   camera.updateProjectionMatrix();
-  brainView.resize();
 }
 addEventListener('resize', resize);
 resize();
 
-// HUD
-const $ = (id) => document.getElementById(id);
-const pct = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
-const setPct = (el, x) => { el.textContent = pct(x); el.classList.toggle('up', x >= 0); el.classList.toggle('down', x < 0); };
-const meters = ['sugar', 'bitter', 'mn9'].map((k) => document.querySelector(`.meter.${k}`));
-let shownDay = -1;
-
-function updateHud(s) {
-  const today = days[s.dayIndex];
-  [[today.sugar_hz, 200], [today.bitter_hz, 200], [today.mn9_hz, 120]].forEach(([hz, full], i) => {
-    meters[i].querySelector('b').style.width = `${Math.min(hz / full, 1) * 100}%`;
-    meters[i].querySelector('em').textContent = `${hz.toFixed(0)}Hz`;
-  });
-  const eat = today.mn9_hz >= params.mn9_threshold_hz;
-  $('decision').innerHTML = s.kind === 'event'
-    ? `<span class="${s.action === 'BUY' ? 'up' : 'down'}">MN9 ${today.mn9_hz.toFixed(0)}Hz → ${s.action === 'BUY' ? 'yum, BUY!' : 'yuck! SELL'}</span>`
-    : `MN9 ${eat ? 'firing → eating (holding)' : 'quiet → not eating (cash)'}`;
-  if (s.dayIndex === shownDay) return;
-  shownDay = s.dayIndex;
-  setPct($('fly-return'), today.equity / summary.start_cash - 1);
-  $('equity').textContent = `$${today.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  setPct($('hold-return'), today.close / days[0].close - 1);
-  $('day-label').textContent = `Day ${s.dayIndex + 1} / ${days.length} · ${today.date.slice(5)}`;
-  const trades = days.slice(0, s.dayIndex + 1).filter((d) => d.action === 'BUY' || d.action === 'SELL');
-  $('trades').textContent = `${trades.length} trade${trades.length === 1 ? '' : 's'}`;
-  $('log').innerHTML = trades.slice(-3).reverse()
-    .map((d) => `<li><span>${d.date.slice(5)}</span><b class="${d.action.toLowerCase()}">${d.action}</b><span>$${d.close.toFixed(2)}</span></li>`).join('');
-}
-
-// playback
-const url = new URLSearchParams(location.search);
-const speed = Number(url.get('speed') ?? 1);
-let t = Number(url.get('t') ?? 0), paused = false;
+let paused = false;
 addEventListener('keydown', (e) => {
   if (e.code === 'Space') paused = !paused;
-  if (e.key === 'r') t = 0;
+  if (e.key === 'r') { camera.position.copy(HOME.pos); controls.target.copy(HOME.target); }
 });
 
-const MOTION_END = 0.7; // fraction of an event spent on the motion before settling back
-
-// loss ending, in seconds since the last candle: read the result → jolt → clutch the head and sob → reset for the loop
-function endingMode(sec) {
-  if (sec < 0.4) return 'idle';
-  if (sec < 1.9) return 'check';
-  if (sec < 2.7) return 'shock';
-  if (sec < LOSS_ENDING_SEC - 0.5) return 'despair';
-  return 'idle';
-}
-
-// slow push-in on the fly during the loss ending; applied as an offset so mouse orbiting/panning still works
-const baseZoom = camera.zoom;
-const PUSH_TARGET = new THREE.Vector3(-0.55, 0.15, 0);
-const pushOffset = new THREE.Vector3();
-function cameraPush(s) {
-  const sec = s.kind === 'ending' ? s.p * LOSS_ENDING_SEC : 0;
-  const k = lost ? THREE.MathUtils.smoothstep(sec, 1.5, 4.5) * (1 - THREE.MathUtils.smoothstep(sec, LOSS_ENDING_SEC - 0.7, LOSS_ENDING_SEC)) : 0;
-  controls.target.sub(pushOffset);
-  pushOffset.copy(PUSH_TARGET).multiplyScalar(k);
-  controls.target.add(pushOffset);
-  camera.zoom = baseZoom * (1 + 0.6 * k);
-  camera.updateProjectionMatrix();
-}
-
-// club lights pulse all loop; the moment the fly despairs they cut out, the room goes black
-// and only a cold spotlight stays on the fly
-const { hemi, key, glow, rim, spot } = room.lights;
-const base = { hemi: hemi.intensity, key: key.intensity, glow: glow.intensity, rim: rim.intensity, glowColor: glow.color.clone() };
-const RED = new THREE.Color(0xff3040);
-let drama = 0;
-function lightDrama(dt, mode) {
-  drama += ((mode === 'despair' ? 1 : 0) - drama) * (1 - Math.exp(-dt * 2.5));
-  hemi.intensity = base.hemi * (1 - 0.88 * drama);
-  key.intensity = base.key * (1 - 0.92 * drama);
-  rim.intensity = base.rim * (1 - drama);
-  room.club.update(t, THREE.MathUtils.smoothstep(drama, 0, 0.3));
-  glow.intensity = base.glow * (1 - 0.3 * drama);
-  glow.color.copy(base.glowColor).lerp(RED, drama);
-  spot.intensity = 60 * drama;
-  $('vignette').style.opacity = drama.toFixed(3);
-}
+let t = 0;
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05);
-  if (!paused) t += dt * speed;
-  const s = stateAt(schedule, t);
-  const acting = s.kind === 'event' && s.p < MOTION_END;
-
-  let mode = 'idle';
-  if (acting) mode = s.action === 'BUY' ? 'buy' : 'sell';
-  if (s.kind === 'ending' && lost) mode = endingMode(s.p * LOSS_ENDING_SEC);
-  $('account').classList.toggle('final', s.kind === 'ending' && s.p * (lost ? LOSS_ENDING_SEC : ENDING_SEC) > 0.4);
-  fly.setMode(mode);
-  lightDrama(paused ? 0 : dt, mode);
-
-  room.drop.visible = acting;
-  if (acting) {
-    const buy = s.action === 'BUY';
-    room.dropMat.color.set(buy ? 0x40ff90 : 0xb050ff);
-    room.dropMat.emissive.set(buy ? 0x20c060 : 0x7020c0);
-    room.dropLight.color.copy(room.dropMat.color);
-    room.dropLight.intensity = 0.35;
-    const q = s.p / MOTION_END;
-    room.drop.scale.setScalar(buy ? 1 - THREE.MathUtils.smoothstep(q, 0.3, 0.95) * 0.95 : 1 - THREE.MathUtils.smoothstep(q, 0.8, 1));
-  }
-
-  monitor.draw(s);
-  room.texture.needsUpdate = true;
-  fly.update(paused ? 0 : dt);
-  brainView.update(paused ? 0 : dt, t, s.dayIndex, days[s.dayIndex], s.kind === 'event');
-  updateHud(s);
-  cameraPush(s);
+  const dt = paused ? 0 : Math.min(clock.getDelta(), 0.05);
+  if (paused) clock.getDelta();
+  t += dt;
+  fly.update(dt);
+  room.clutter.update(dt, t);
+  room.club.update(t, room.lights);
   controls.update();
   renderer.render(scene, camera);
+  css.render(cssScene, camera);
 });
 
-window.__debug = { camera, controls, fly, schedule, setT: (x) => { t = x; } }; // inspection only
+window.__debug = { camera, controls, fly, scene }; // inspection only

@@ -1,8 +1,8 @@
-// Club lighting: moving colored spotlights with visible beams, LED strips and a floor grid that cycle through hues
-// on a 124 BPM pulse. update(t, off) fades everything out (off = 1 → pitch black) for the despair ending.
+// Club lighting: moving colored spotlights with visible beams, LED strips, the PC's fan rings and a floor grid that
+// cycle through hues on a beat (Caramelldansen runs at about 165 BPM). update(t, tvColor) also tints the TV spill.
 import * as THREE from 'three';
 
-const BPM = 124;
+const BPM = 165;
 const RIGS = [ // ceiling position, sweep phase
   { pos: [-4, 7.5, -3.5], phase: 0 },
   { pos: [5.5, 7.5, -3.5], phase: 1.6 },
@@ -10,7 +10,7 @@ const RIGS = [ // ceiling position, sweep phase
   { pos: [5, 7.5, 3.5], phase: 4.7 },
 ];
 
-export function buildClub(scene, { grid, flyPos, deskTop, deskSpan, stoolPos }) {
+export function buildClub(scene, { grid, flyPos, deskTop, deskSpan, stoolPos, rgbMats, rgbLight }) {
   const beamMat = () => new THREE.MeshBasicMaterial({
     transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
   });
@@ -47,12 +47,10 @@ export function buildClub(scene, { grid, flyPos, deskTop, deskSpan, stoolPos }) 
 
   grid.material.vertexColors = false;
   grid.material.needsUpdate = true;
-  const gridOpacity = grid.material.opacity;
 
   const c = new THREE.Color();
   return {
-    update(t, off) {
-      const on = 1 - off;
+    update(t, tv) {
       const beat = Math.exp(-((t * BPM) / 60 % 1) * 5); // kick on every beat, decays fast
       rigs.forEach(({ light, beam, phase }, i) => {
         c.setHSL((t * 0.12 + i * 0.25) % 1, 1, 0.55);
@@ -63,20 +61,26 @@ export function buildClub(scene, { grid, flyPos, deskTop, deskSpan, stoolPos }) 
         );
         light.target.position.copy(aim);
         light.color.copy(c);
-        light.intensity = on * (22 + 30 * beat);
+        light.intensity = 22 + 30 * beat;
         const dir = aim.clone().sub(light.position);
         beam.scale.set(1, dir.length(), 1);
         beam.quaternion.setFromUnitVectors(down, dir.normalize());
         beam.material.color.copy(c);
-        beam.material.opacity = on * (0.07 + 0.09 * beat);
-        beam.visible = on > 0.01;
+        beam.material.opacity = 0.07 + 0.09 * beat;
       });
       c.setHSL((t * 0.2) % 1, 1, 0.5);
-      ledMat.color.copy(c).multiplyScalar(on * (0.7 + 0.5 * beat));
+      ledMat.color.copy(c).multiplyScalar(0.7 + 0.5 * beat);
       ledLight.color.copy(c);
-      ledLight.intensity = on * 3;
+      ledLight.intensity = 3;
       grid.material.color.setHSL((t * 0.12 + 0.5) % 1, 0.9, 0.45 + 0.2 * beat);
-      grid.material.opacity = gridOpacity * on;
+      rgbMats.forEach((m, i) => m.color.setHSL((t * 0.25 + i * 0.12) % 1, 1, 0.55));
+      rgbLight.color.copy(rgbMats[1].color);
+      // the TV flickers with the video's colors: fast hue jumps on the beat, bright flash on each kick
+      c.setHSL((Math.floor((t * BPM) / 60) * 0.37) % 1, 0.55, 0.65);
+      tv.tvLight.color.copy(c);
+      tv.tvLight.intensity = 26 + 12 * beat;
+      tv.tvGlow.color.copy(c);
+      tv.tvGlow.intensity = 3 + 3 * beat;
     },
   };
 }

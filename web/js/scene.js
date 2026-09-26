@@ -1,12 +1,13 @@
-// The office: grid floor, low-poly desk, stool, keyboard, monitor, and the taste droplet.
+// The room: grid floor, back wall, desk, stool, keyboard, a big TV, an RGB PC tower and the desk clutter.
 import * as THREE from 'three';
 import { buildClutter } from './props.js';
 import { buildClub } from './club.js';
 
-export const FLY_POS = new THREE.Vector3(0, 2.0, 0);
+export const FLY_POS = new THREE.Vector3(0.55, 2.05, 0.3);
 const DESK_TOP = 1.65;
-const KEYBOARD = new THREE.Vector3(1.35, DESK_TOP + 0.07, 0);
+const DESK = { x0: 0.55, x1: 3.95, z: 2.3 }; // near edge, far edge, half width
 const SEAT_TOP = 1.02;
+export const SCREEN = { w: 3.4, h: 3.4 * 9 / 16 };
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, flatShading: true, ...extra });
 
@@ -18,9 +19,9 @@ function box(w, h, d, material, x, y, z) {
   return m;
 }
 
-export function buildRoom(scene, screenCanvas) {
-  scene.background = new THREE.Color(0x06070d);
-  scene.fog = new THREE.Fog(0x06070d, 14, 34);
+export function buildRoom(scene) {
+  scene.background = new THREE.Color(0x05060b);
+  scene.fog = new THREE.Fog(0x05060b, 14, 34);
 
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x0b0c16, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2;
@@ -32,19 +33,27 @@ export function buildRoom(scene, screenCanvas) {
   grid.material.opacity = 0.7;
   scene.add(grid);
 
+  // back wall behind the TV, so the club colors wash over something
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(24, 9), new THREE.MeshStandardMaterial({ color: 0x3a3d4a, roughness: 0.95 }));
+  wall.rotation.y = -Math.PI / 2;
+  wall.position.set(DESK.x1 + 0.9, 4.5, 0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+
   // desk
-  const deskMat = flat(0xa7c7ec);
+  const deskMat = flat(0x2b2f3a, { roughness: 0.55 });
   const desk = new THREE.Group();
-  desk.add(box(2.9, 0.1, 3.6, deskMat, 2.25, DESK_TOP - 0.05, 0));
-  for (const [x, z] of [[0.95, 1.65], [0.95, -1.65], [3.55, 1.65], [3.55, -1.65]]) {
-    desk.add(box(0.14, DESK_TOP - 0.1, 0.14, deskMat, x, (DESK_TOP - 0.1) / 2, z));
+  const cx = (DESK.x0 + DESK.x1) / 2;
+  desk.add(box(DESK.x1 - DESK.x0, 0.1, DESK.z * 2, deskMat, cx, DESK_TOP - 0.05, 0));
+  for (const x of [DESK.x0 + 0.15, DESK.x1 - 0.15]) for (const z of [DESK.z - 0.15, -DESK.z + 0.15]) {
+    desk.add(box(0.12, DESK_TOP - 0.1, 0.12, deskMat, x, (DESK_TOP - 0.1) / 2, z));
   }
   scene.add(desk);
 
-  // stool
-  const stoolMat = flat(0xd4dcea);
+  // stool, pulled in under the fly's abdomen
+  const stoolMat = flat(0x3b4050);
   const stool = new THREE.Group();
-  stool.position.set(-0.75, 0, 0);
+  stool.position.set(FLY_POS.x - 0.75, 0, FLY_POS.z);
   const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.12, 40), stoolMat);
   seat.position.y = SEAT_TOP - 0.06;
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, SEAT_TOP - 0.1, 16), flat(0x8f99ad));
@@ -54,80 +63,98 @@ export function buildRoom(scene, screenCanvas) {
   for (const m of [seat, post, base]) { m.castShadow = m.receiveShadow = true; stool.add(m); }
   scene.add(stool);
 
-  // keyboard + mouse
-  const kbMat = flat(0xe9eef6);
-  scene.add(box(0.5, 0.07, 1.3, kbMat, KEYBOARD.x, DESK_TOP + 0.035, 0));
-  const keys = new THREE.InstancedMesh(new THREE.BoxGeometry(0.065, 0.025, 0.07), flat(0xc9d2e0), 5 * 15);
+  // keyboard shoved aside by the fly's head, mouse beside it
+  const kbMat = flat(0x1a1d24);
+  const kb = new THREE.Group();
+  kb.position.set(2.05, DESK_TOP, -0.1);
+  kb.rotation.y = 0.18;
+  kb.add(box(0.5, 0.07, 1.3, kbMat, 0, 0.035, 0));
+  const keys = new THREE.InstancedMesh(new THREE.BoxGeometry(0.065, 0.025, 0.07), flat(0x2c313b), 5 * 15);
   const m4 = new THREE.Matrix4();
   let n = 0;
   for (let r = 0; r < 5; r++) for (let c = 0; c < 15; c++) {
-    m4.makeTranslation(KEYBOARD.x - 0.18 + r * 0.09, DESK_TOP + 0.08, -0.58 + c * 0.083);
+    m4.makeTranslation(-0.18 + r * 0.09, 0.08, -0.58 + c * 0.083);
     keys.setMatrixAt(n++, m4);
   }
   keys.castShadow = true;
-  scene.add(keys);
+  kb.add(keys);
   const mouse = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 12), kbMat);
   mouse.scale.set(1.3, 0.45, 0.8);
-  mouse.position.set(KEYBOARD.x, DESK_TOP + 0.04, 0.95);
+  mouse.position.set(0.1, 0.04, 0.95);
   mouse.castShadow = true;
-  scene.add(mouse);
+  kb.add(mouse);
+  scene.add(kb);
 
-  // monitor, turned a little toward the camera
-  const monitor = new THREE.Group();
-  monitor.position.set(2.75, DESK_TOP, 0.05);
-  monitor.rotation.y = 0.3;
-  const dark = flat(0x2a3140);
-  monitor.add(box(0.45, 0.04, 0.7, dark, 0, 0.02, 0));
-  monitor.add(box(0.08, 0.5, 0.12, dark, 0.05, 0.27, 0));
-  monitor.add(box(0.07, 1.34, 2.24, flat(0x9fb4cf), 0, 1.12, 0));
-  const texture = new THREE.CanvasTexture(screenCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.12, 1.22), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+  // big TV facing the fly; the screen itself is a see-through hole that the YouTube player shows through
+  const tv = new THREE.Group();
+  tv.position.set(3.45, DESK_TOP, -0.35);
+  const dark = flat(0x14161c, { roughness: 0.4 });
+  tv.add(box(0.5, 0.04, 1.0, dark, 0, 0.02, 0));
+  tv.add(box(0.1, 0.4, 0.16, dark, 0.05, 0.2, 0));
+  const screenY = 0.35 + SCREEN.h / 2;
+  tv.add(box(0.08, SCREEN.h + 0.1, SCREEN.w + 0.1, dark, 0.04, screenY, 0));
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN.w, SCREEN.h),
+    new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, fog: false, toneMapped: false }));
   screen.rotation.y = -Math.PI / 2;
-  screen.position.set(-0.04, 1.12, 0);
-  monitor.add(screen);
-  scene.add(monitor);
+  screen.position.set(-0.002, screenY, 0);
+  tv.add(screen);
+  scene.add(tv);
 
-  buildClutter(scene, DESK_TOP);
+  // PC tower with a glass side and three RGB fan rings, to the right of the TV
+  const pc = new THREE.Group();
+  pc.position.set(3.2, DESK_TOP, 1.75);
+  pc.add(box(1.1, 1.45, 0.55, flat(0x101217, { roughness: 0.35 }), 0, 0.725, 0));
+  const glassSide = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.35),
+    new THREE.MeshPhysicalMaterial({ color: 0x223344, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.35 }));
+  glassSide.rotation.y = -Math.PI / 2;
+  glassSide.position.set(-0.556, 0.725, 0);
+  pc.add(glassSide);
+  const rgbMats = [];
+  for (let i = 0; i < 3; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, toneMapped: false });
+    rgbMats.push(mat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.018, 8, 40), mat);
+    ring.position.set(0.5, 0.3 + i * 0.42, -0.284);
+    pc.add(ring);
+    const side = ring.clone();
+    side.rotation.y = Math.PI / 2;
+    side.position.set(-0.54, 0.3 + i * 0.42, 0);
+    pc.add(side);
+  }
+  const pcLight = new THREE.PointLight(0xff00ff, 2, 3, 1.5);
+  pcLight.position.set(2.6, DESK_TOP + 0.8, 1.6);
+  pc.userData.light = pcLight;
+  scene.add(pc, pcLight);
 
-  // the taste droplet on the desk in front of the keyboard
-  const dropMat = new THREE.MeshStandardMaterial({ color: 0x40ff90, emissive: 0x20c060, emissiveIntensity: 1.6, roughness: 0.05, transparent: true, opacity: 0.9 });
-  const drop = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 16), dropMat);
-  drop.scale.set(1, 0.6, 1);
-  drop.position.set(1.0, DESK_TOP + 0.05, 0);
-  const dropLight = new THREE.PointLight(0x40ff90, 0, 2.5);
-  drop.add(dropLight);
-  scene.add(drop);
+  const clutter = buildClutter(scene, DESK_TOP);
 
-  // lights
-  const hemi = new THREE.HemisphereLight(0xb8c6ff, 0x1a1420, 0.9);
+  // lights: dim room, the TV is the main light on the fly
+  const hemi = new THREE.HemisphereLight(0xb8c6ff, 0x1a1420, 0.45);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  const key = new THREE.DirectionalLight(0xffffff, 0.6);
   key.position.set(-3, 8, 5);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 1, far: 20 });
   key.shadow.bias = -0.0005;
   scene.add(key);
-  const glow = new THREE.PointLight(0x6fd0ff, 5, 5);
-  glow.position.set(2.2, 2.7, 0.3);
-  scene.add(glow);
-  const rim = new THREE.DirectionalLight(0x9a6bff, 1.4);
-  rim.position.set(-5, 3, -4);
-  scene.add(rim);
-  // cold spotlight straight down on the fly, only lit for the despair ending
-  const spot = new THREE.SpotLight(0xa8c8ff, 0, 9, 0.32, 0.6, 1);
-  spot.position.set(FLY_POS.x - 0.3, FLY_POS.y + 6, FLY_POS.z + 0.6);
-  spot.target.position.copy(FLY_POS);
-  scene.add(spot, spot.target);
+  const tvLight = new THREE.SpotLight(0xffffff, 0, 8, 0.75, 0.9, 1); // spill from the screen onto the fly and desk
+  tvLight.position.set(3.3, DESK_TOP + screenY, -0.35);
+  tvLight.target.position.set(FLY_POS.x, DESK_TOP, FLY_POS.z);
+  scene.add(tvLight, tvLight.target);
+  const tvGlow = new THREE.PointLight(0xffffff, 0, 6, 1.2);
+  tvGlow.position.set(2.4, DESK_TOP + 1.2, -0.3);
+  scene.add(tvGlow);
 
   return {
-    texture, drop, dropMat, dropLight,
-    lights: { hemi, key, glow, rim, spot },
-    club: buildClub(scene, { grid, flyPos: FLY_POS, deskTop: DESK_TOP, deskSpan: [0.8, 3.7, 1.8], stoolPos: stool.position }),
+    screen, clutter,
+    lights: { tvLight, tvGlow },
+    club: buildClub(scene, {
+      grid, flyPos: FLY_POS, deskTop: DESK_TOP, deskSpan: [DESK.x0, DESK.x1, DESK.z], stoolPos: stool.position,
+      rgbMats, rgbLight: pcLight,
+    }),
     // positions the fly needs, relative to the fly
-    keyboard: KEYBOARD.clone().sub(FLY_POS),
+    deskY: DESK_TOP - FLY_POS.y,
     seatY: SEAT_TOP - FLY_POS.y,
   };
 }
