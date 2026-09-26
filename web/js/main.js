@@ -111,15 +111,18 @@ function cameraPush(s) {
   camera.updateProjectionMatrix();
 }
 
-// the room goes dark and a cold spotlight falls on the fly while it despairs
-const { hemi, key, glow, spot } = room.lights;
-const base = { hemi: hemi.intensity, key: key.intensity, glow: glow.intensity, glowColor: glow.color.clone() };
+// club lights pulse all loop; the moment the fly despairs they cut out, the room goes black
+// and only a cold spotlight stays on the fly
+const { hemi, key, glow, rim, spot } = room.lights;
+const base = { hemi: hemi.intensity, key: key.intensity, glow: glow.intensity, rim: rim.intensity, glowColor: glow.color.clone() };
 const RED = new THREE.Color(0xff3040);
 let drama = 0;
 function lightDrama(dt, mode) {
   drama += ((mode === 'despair' ? 1 : 0) - drama) * (1 - Math.exp(-dt * 2.5));
-  hemi.intensity = base.hemi * (1 - 0.7 * drama);
-  key.intensity = base.key * (1 - 0.8 * drama);
+  hemi.intensity = base.hemi * (1 - 0.88 * drama);
+  key.intensity = base.key * (1 - 0.92 * drama);
+  rim.intensity = base.rim * (1 - drama);
+  room.club.update(t, THREE.MathUtils.smoothstep(drama, 0, 0.3));
   glow.intensity = base.glow * (1 - 0.3 * drama);
   glow.color.copy(base.glowColor).lerp(RED, drama);
   spot.intensity = 60 * drama;

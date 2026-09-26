@@ -1,6 +1,7 @@
 // The office: grid floor, low-poly desk, stool, keyboard, monitor, and the taste droplet.
 import * as THREE from 'three';
 import { buildClutter } from './props.js';
+import { buildClub } from './club.js';
 
 export const FLY_POS = new THREE.Vector3(0, 2.0, 0);
 const DESK_TOP = 1.65;
@@ -124,6 +125,7 @@ export function buildRoom(scene, screenCanvas) {
   return {
     texture, drop, dropMat, dropLight,
     lights: { hemi, key, glow, rim, spot },
+    club: buildClub(scene, { grid, flyPos: FLY_POS, deskTop: DESK_TOP, deskSpan: [0.8, 3.7, 1.8], stoolPos: stool.position }),
     // positions the fly needs, relative to the fly
     keyboard: KEYBOARD.clone().sub(FLY_POS),
     seatY: SEAT_TOP - FLY_POS.y,
